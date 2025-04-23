@@ -43,5 +43,15 @@ public class ClienteThread extends Thread {
             e.printStackTrace();
         }
     }
+
+
+    public long[] obtenerResultadosMediciones() {
+        if ( cliente == null ) {
+            return new long[]{0,0};
+        }
+        long tiempoTotalSimetrico = cliente.getTiempoCifradoSimetrico();
+        long tiempoTotalAsimetrico = cliente.getTiempoCifradoAsimetrico();
+        return new long[]{tiempoTotalSimetrico,tiempoTotalAsimetrico};
+    }
         
 }
