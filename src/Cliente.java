@@ -1,4 +1,5 @@
 import java.io.ByteArrayInputStream;
+import java.io.EOFException;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -88,36 +89,52 @@ public class Cliente {
 
     private void establecerClavesSeguras(ObjectInputStream entrada, ObjectOutputStream salida) throws IOException, 
                                             GeneralSecurityException, ClassNotFoundException {
-        byte[] parametrosSerializados = (byte[]) entrada.readObject();
-        byte[] firmaParametros = (byte[]) entrada.readObject();
+        try {
+            System.out.println("Esperando parámetros DH del servidor...");
+            byte[] parametrosSerializados = (byte[]) entrada.readObject();
+            System.out.println("Parámetros DH recibidos del servidor.");
+            byte[] firmaParametros = (byte[]) entrada.readObject();
+            System.out.println("Firma de parámetros DH recibida del servidor.");
 
-        if (!CryptoUtils.verificarFirma(parametrosSerializados, firmaParametros, clavePublicaServidor)) {
-            throw new SecurityException("Error en la consulta: La firma de los parámetros DH no es válida.");
-        }
+            if (!CryptoUtils.verificarFirma(parametrosSerializados, firmaParametros, clavePublicaServidor)) {
+                throw new SecurityException("Error en la consulta: La firma de los parámetros DH no es válida.");
+            }
 
-        DHParameterSpec dhParams = deserializarParametrosDH(parametrosSerializados);
+            DHParameterSpec dhParams = deserializarParametrosDH(parametrosSerializados);
 
-        KeyPair miParClavesDH = CryptoUtils.generarClavesDH(dhParams);
-        byte[] clavePublicaDH = miParClavesDH.getPublic().getEncoded();
-        
-        salida.writeObject(clavePublicaDH);
-        salida.flush();
-        
-        byte[] clavePublicaDHServidor = (byte[]) entrada.readObject();
-        
-        KeyFactory kewFactory = KeyFactory.getInstance("DH");
-        X509EncodedKeySpec specDH = new X509EncodedKeySpec(clavePublicaDHServidor);
-        PublicKey clavePublicaServidorDH = kewFactory.generatePublic(specDH);
+            KeyPair miParClavesDH = CryptoUtils.generarClavesDH(dhParams);
+            byte[] clavePublicaDH = miParClavesDH.getPublic().getEncoded();
+            
+            salida.writeObject(clavePublicaDH);
+            salida.flush();
+            
+            byte[] clavePublicaDHServidor = (byte[]) entrada.readObject();
+            
+            KeyFactory kewFactory = KeyFactory.getInstance("DH");
+            X509EncodedKeySpec specDH = new X509EncodedKeySpec(clavePublicaDHServidor);
+            PublicKey clavePublicaServidorDH = kewFactory.generatePublic(specDH);
 
-        KeyAgreement keyAgreement = KeyAgreement.getInstance("DH");
-        keyAgreement.init(miParClavesDH.getPrivate());
-        keyAgreement.doPhase(clavePublicaServidorDH, true);
+            KeyAgreement keyAgreement = KeyAgreement.getInstance("DH");
+            keyAgreement.init(miParClavesDH.getPrivate());
+            keyAgreement.doPhase(clavePublicaServidorDH, true);
 
-        byte[] secretoCompartido = keyAgreement.generateSecret();
+            byte[] secretoCompartido = keyAgreement.generateSecret();
 
-        SecretKey[] clavesSesion = CryptoUtils.generarClavesSesion(secretoCompartido);
-        this.claveCifrado = clavesSesion[0];
-        this.claveHMAC = clavesSesion[1];
+            SecretKey[] clavesSesion = CryptoUtils.generarClavesSesion(secretoCompartido);
+            this.claveCifrado = clavesSesion[0];
+            this.claveHMAC = clavesSesion[1];
+        } catch (IOException e){
+            System.err.println("Error de IO al establecer claves seguras: " + e.getMessage());
+            if (e instanceof EOFException) {
+                System.err.println("Conexión cerrada por el servidor prematuramente");
+            }
+            e.printStackTrace();
+            throw new RuntimeException("Error al establecer claves seguras", e);
+        } catch (Exception e){
+            System.err.println("Error inesperado al establecer claves seguras: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Error al establecer claves seguras", e);
+        } 
     }
 
     private Map<String, String> recibirTablaServicios(ObjectInputStream entrada) throws IOException, 
