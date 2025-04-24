@@ -34,28 +34,40 @@ public class ServidorDelegado extends Thread {
     }
 
     @Override
-    public void run() {
-        try{
-            salida = new ObjectOutputStream(clientSocket.getOutputStream());
-            salida.flush();
-            entrada = new ObjectInputStream(clientSocket.getInputStream());
+public void run() {
+    try {
+        entrada = new ObjectInputStream(clientSocket.getInputStream());
+        salida = new ObjectOutputStream(clientSocket.getOutputStream());
+        salida.flush();
 
-            establecerClavesSeguras();
-            enviarTablaServicios();
-            procesarConsulta();
-        } catch (Exception e){
-            System.err.println("Error en comunicacion con el cliente: " + e.getMessage());
-            e.printStackTrace();
-        } finally {
-            try {
-                if (entrada != null) entrada.close();
-                if (salida != null) salida.close();
-                if (clientSocket != null && !clientSocket.isClosed()) clientSocket.close();
-            } catch (IOException e) {
-                System.err.println("Error cerrando recursos: " + e.getMessage());
+        System.out.println("ServidorDelegado: Streams inicializados para cliente " + clientSocket.getInetAddress().getHostAddress());
+
+        establecerClavesSeguras();
+        enviarTablaServicios();
+        procesarConsulta();
+    } catch (Exception e) {
+        System.err.println("Error en comunicación con el cliente: " + e.getMessage());
+        e.printStackTrace();
+    } finally {
+        try {
+            if (entrada != null) {
+                System.out.println("ServidorDelegado: Cerrando entrada...");
+                entrada.close();
             }
+            if (salida != null) {
+                System.out.println("ServidorDelegado: Cerrando salida...");
+                salida.close();
+            }
+            if (clientSocket != null && !clientSocket.isClosed()) {
+                System.out.println("ServidorDelegado: Cerrando socket...");
+                clientSocket.close();
+            }
+        } catch (IOException e) {
+            System.err.println("Error cerrando recursos: " + e.getMessage());
+            e.printStackTrace();
         }
     }
+}
 
     private void establecerClavesSeguras() throws Exception {
         try {
@@ -74,6 +86,7 @@ public class ServidorDelegado extends Thread {
             salida.writeObject(parametrosSerializados);
             salida.writeObject(firmaParametros);
             salida.flush();
+            System.out.println("Parámetros DH y firma enviados al cliente.");
 
             KeyPair serverDHKeyPair = CryptoUtils.generarClavesDH(dhParamsSpec);
             

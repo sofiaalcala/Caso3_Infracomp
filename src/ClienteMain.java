@@ -6,7 +6,7 @@ public class ClienteMain {
         ClienteManager manager = new ClienteManager(host, puerto, archivoClavePublica);
 
         //Escenario 1: Cliente único con múltiples consultas
-        manager.ejecutarClienteUnico(32);
+        manager.ejecutarClienteUnico(4);
 
         //Escenario 2: Múltiples clientes con múltiples consultas
         //manager.ejecutarClientesConcurrentes(4);

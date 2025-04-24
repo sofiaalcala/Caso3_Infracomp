@@ -77,12 +77,14 @@ public class ServidorPrincipal {
         try (FileOutputStream fosPriv = new FileOutputStream(archivoClavePrivada);
              ObjectOutputStream oosPriv = new ObjectOutputStream(fosPriv)) {
             oosPriv.writeObject(llavePrivada);
+            System.out.println("Clave privada generada en: " + new File(archivoClavePrivada).getAbsolutePath());
             }
             
         // Guardar clave pública
         try (FileOutputStream fosPub = new FileOutputStream(archivoClavePublica);
             ObjectOutputStream oosPub = new ObjectOutputStream(fosPub)) {
             oosPub.writeObject(llavePublica);
+            System.out.println("Clave pública generada en: " + new File(archivoClavePublica).getAbsolutePath());
             }
         
         System.out.println("Clave pública generada en: " + new File(archivoClavePublica).getAbsolutePath());

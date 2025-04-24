@@ -57,14 +57,14 @@ public class Cliente {
 
     public void conectar() {
         try (Socket socket = new Socket(host, puerto);
-            ObjectOutputStream salida = new ObjectOutputStream(socket.getOutputStream());
-            ObjectInputStream entrada = new ObjectInputStream(socket.getInputStream())) {
+             ObjectOutputStream salida = new ObjectOutputStream(socket.getOutputStream());
+             ObjectInputStream entrada = new ObjectInputStream(socket.getInputStream())) {
             
             establecerClavesSeguras(entrada, salida);
             Map<String, String> servicios = recibirTablaServicios(entrada);
             mostrarServicios(servicios);
             String idServicio = seleccionarServicioAleatorio(servicios);
-            enviarConsulta(idServicio,salida);
+            enviarConsulta(idServicio, salida);
             InfoServicio infoServicio = recibirRespuesta(entrada);
             mostrarResultado(infoServicio);
             medirTiempoCifradoAsimetrico();
@@ -262,7 +262,13 @@ public class Cliente {
     private DHParameterSpec deserializarParametrosDH(byte[] datos) throws IOException, ClassNotFoundException {
         try (ByteArrayInputStream bais = new ByteArrayInputStream(datos);
              ObjectInputStream ois = new ObjectInputStream(bais)) {
-            return (DHParameterSpec) ois.readObject();
+            DHParameterSpec result = (DHParameterSpec) ois.readObject();
+            System.out.println("Parámetros DH deserializados correctamente. Tamaño de los datos: " + datos.length + " bytes");
+            return result;
+        } catch (Exception e) {
+            System.err.println("Error al deserializar parámetros DH: " + e.getMessage());
+            e.printStackTrace();
+            throw e;
         }
     }
 

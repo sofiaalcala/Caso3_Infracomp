@@ -183,7 +183,13 @@ public class CryptoUtils {
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
              ObjectOutputStream oos = new ObjectOutputStream(baos)) {
             oos.writeObject(obj);
-            return baos.toByteArray();
+            byte[] result = baos.toByteArray();
+            System.out.println("Objeto serializado correctamente. Tipo: " + obj.getClass().getSimpleName() + ", Tamaño: " + result.length + " bytes");
+            return result;
+        } catch (IOException e) {
+            System.err.println("Error al serializar objeto: " + e.getMessage());
+            e.printStackTrace();
+            throw e;
         }
     }
     

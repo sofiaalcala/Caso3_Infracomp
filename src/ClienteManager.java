@@ -23,8 +23,8 @@ public class ClienteManager {
             long tiempoTotalAsimetrico = 0;
 
             for (int i=0; i< numConsultas; i++){
-                System.out.println("\n--- COnsulta "+(i+1)+" de"+numConsultas+" ---");
-                cliente.conectar();
+                System.out.println("\n--- Consulta "+(i+1)+" de "+numConsultas+" ---");
+                cliente.conectar(); 
 
                 tiempoTotalSimetrico += cliente.getTiempoCifradoSimetrico();
                 tiempoTotalAsimetrico += cliente.getTiempoCifradoAsimetrico();               ;
