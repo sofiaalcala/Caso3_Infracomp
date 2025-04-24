@@ -4,7 +4,9 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
 import java.security.KeyPair;
@@ -56,9 +58,18 @@ public class Cliente {
     }
 
     public void conectar() {
-        try (Socket socket = new Socket(host, puerto);
-             ObjectOutputStream salida = new ObjectOutputStream(socket.getOutputStream());
-             ObjectInputStream entrada = new ObjectInputStream(socket.getInputStream())) {
+        Socket socket = null;
+        ObjectInputStream entrada = null;
+        ObjectOutputStream salida = null;   
+        try {
+            socket = new Socket();
+
+            socket.setSoTimeout(10000);
+            socket.connect(new InetSocketAddress(host,puerto),5000);
+
+            salida = new ObjectOutputStream(socket.getOutputStream());
+            salida.flush();
+            entrada = new ObjectInputStream(socket.getInputStream());
             
             establecerClavesSeguras(entrada, salida);
             Map<String, String> servicios = recibirTablaServicios(entrada);
@@ -69,21 +80,24 @@ public class Cliente {
             mostrarResultado(infoServicio);
             medirTiempoCifradoAsimetrico();
             
+        } catch (SocketTimeoutException e) {
+        System.err.println("Timeout al conectar o recibir datos del servidor: " + e.getMessage());
+        e.printStackTrace();
         } catch (IOException e) {
             System.err.println("Error al conectar al servidor: " + e.getMessage());
-            e.printStackTrace();
-        } catch (GeneralSecurityException e) {
-            System.err.println("Error de seguridad: " + e.getMessage());
-            e.printStackTrace();
-        } catch (ClassNotFoundException e) {
-            System.err.println("Error al deserializar el objeto: " + e.getMessage());
-            e.printStackTrace();
-        } catch (SecurityException e) {
-            System.err.println("Error de seguridad: " + e.getMessage());
             e.printStackTrace();
         } catch (Exception e) {
             System.err.println("Error inesperado: " + e.getMessage());
             e.printStackTrace();
+        } finally {
+            // Cerrar recursos en orden inverso
+            try {
+                if (entrada != null) entrada.close();
+                if (salida != null) salida.close();
+                if (socket != null && !socket.isClosed()) socket.close();
+            } catch (IOException e) {
+                System.err.println("Error al cerrar recursos: " + e.getMessage());
+            }
         }
     }
 

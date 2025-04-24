@@ -7,6 +7,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
@@ -45,7 +46,7 @@ public class ServidorPrincipal {
     public void cargarClaves(String archivoClavePrivada, String archivoClavePublica) 
         throws FileNotFoundException, IOException, ClassNotFoundException {
         
-        // Cargar clave privada - asegúrate que el archivo contenga la clave privada
+        // Cargar clave privada 
         try (FileInputStream fisPriv = new FileInputStream(archivoClavePrivada);
              ObjectInputStream oisPriv = new ObjectInputStream(fisPriv)) {
             Object obj = oisPriv.readObject();
@@ -55,7 +56,7 @@ public class ServidorPrincipal {
             clavePrivadaRSA = (PrivateKey) obj;
         }
         
-        // Cargar clave pública - asegúrate que el archivo contenga la clave pública
+        // Cargar clave pública
         try (FileInputStream fisPub = new FileInputStream(archivoClavePublica);
              ObjectInputStream oisPub = new ObjectInputStream(fisPub)) {
             Object obj = oisPub.readObject();
@@ -70,34 +71,37 @@ public class ServidorPrincipal {
         KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
         generator.initialize(1024);
         KeyPair keyPair = generator.generateKeyPair();
-        PublicKey llavePublica = keyPair.getPublic();
-        PrivateKey llavePrivada = keyPair.getPrivate();
+        this.clavePublicaRSA = keyPair.getPublic();
+        this.clavePrivadaRSA = keyPair.getPrivate();
 
         //Guarda clave privada
         try (FileOutputStream fosPriv = new FileOutputStream(archivoClavePrivada);
              ObjectOutputStream oosPriv = new ObjectOutputStream(fosPriv)) {
-            oosPriv.writeObject(llavePrivada);
+            oosPriv.writeObject(this.clavePrivadaRSA);
             System.out.println("Clave privada generada en: " + new File(archivoClavePrivada).getAbsolutePath());
             }
             
         // Guardar clave pública
         try (FileOutputStream fosPub = new FileOutputStream(archivoClavePublica);
             ObjectOutputStream oosPub = new ObjectOutputStream(fosPub)) {
-            oosPub.writeObject(llavePublica);
+            oosPub.writeObject(this.clavePublicaRSA);
             System.out.println("Clave pública generada en: " + new File(archivoClavePublica).getAbsolutePath());
             }
         
-        System.out.println("Clave pública generada en: " + new File(archivoClavePublica).getAbsolutePath());
         System.out.println("Tamaño del archivo: " + new File(archivoClavePublica).length() + " bytes");
     }
 
     public void iniciar() {
         try (ServerSocket serverSocket = new ServerSocket(puerto)) {
+            serverSocket.setSoTimeout(30000);
             System.out.println("Servidor principal iniciado en puerto " + puerto);
             System.out.println("Esperando conexiones de clientes...");
             
             while (true) {
+                try{
                 Socket clientSocket = serverSocket.accept();
+                clientSocket.setSoTimeout(15000);
+    
                 contadorClientes.incrementAndGet();
                 System.out.println("Nuevo cliente conectado: " + clientSocket.getInetAddress().getHostAddress());
                 
@@ -105,6 +109,9 @@ public class ServidorPrincipal {
                 tiempoTotalCifradoTabla, tiempoTotalVerificarConsulta);
 
                 delegado.start();
+                } catch (SocketTimeoutException e) {
+                    System.err.println("Esperando conexiones... (30s sin actividad)");
+                }
             }
         } catch (IOException e) {
             System.err.println("Error en el servidor principal: " + e.getMessage());

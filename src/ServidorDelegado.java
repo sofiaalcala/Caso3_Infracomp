@@ -45,6 +45,8 @@ public void run() {
         establecerClavesSeguras();
         enviarTablaServicios();
         procesarConsulta();
+    } catch (SocketTimeoutException e) {
+        System.err.println("Tiempo en comunicación con el cliente: "+ e.getMessage());
     } catch (Exception e) {
         System.err.println("Error en comunicación con el cliente: " + e.getMessage());
         e.printStackTrace();
