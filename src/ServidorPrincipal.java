@@ -66,13 +66,13 @@ public class ServidorPrincipal {
         //Guarda clave privada
         try (FileOutputStream fosPriv = new FileOutputStream(archivoClavePrivada);
              ObjectOutputStream oosPriv = new ObjectOutputStream(fosPriv)) {
-            oosPriv.writeObject(llavePublica);
+            oosPriv.writeObject(llavePrivada);
             }
             
         // Guardar clave pública
         try (FileOutputStream fosPub = new FileOutputStream(archivoClavePublica);
             ObjectOutputStream oosPub = new ObjectOutputStream(fosPub)) {
-            oosPub.writeObject(llavePrivada);
+            oosPub.writeObject(llavePublica);
             }
     }
 
