@@ -98,6 +98,17 @@ public class ServidorPrincipal {
         }
     }
 
+    public void imprimirEstadisticas() {
+        long totalClientes = contadorClientes.get();
+        if (totalClientes > 0) {
+            System.out.println("\n=== Estadísticas del Servidor ===");
+            System.out.println("Clientes atendidos: " + totalClientes);
+            System.out.println("Tiempo promedio de firma: " + (tiempoTotalFirma.get() / totalClientes) + " ns");
+            System.out.println("Tiempo promedio de cifrado de tabla: " + (tiempoTotalCifradoTabla.get() / totalClientes) + " ns");
+            System.out.println("Tiempo promedio de verificación de consulta: " + (tiempoTotalVerificarConsulta.get() / totalClientes) + " ns");
+        }
+    }
+
     public static void main(String[] args) throws FileNotFoundException, ClassNotFoundException, IOException, NoSuchAlgorithmException {
         int puerto = 8000;
         ServidorPrincipal servidor = new ServidorPrincipal(puerto);
@@ -108,9 +119,16 @@ public class ServidorPrincipal {
         
         if (clavePrivada.exists() && clavePublica.exists()) {
             servidor.cargarClaves("servidor_privada.key", "servidor_publica.key");
+            System.out.println("Claves RSA cargadas exitosamente.");
         } else {
             servidor.generarClaves("servidor_privada.key", "servidor_publica.key");
+            System.out.println("Claves RSA generadas y guardadas.");
         }
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            servidor.imprimirEstadisticas();
+            System.out.println("Servidor principal cerrado.");
+        }));
 
         servidor.iniciar(); 
     }
