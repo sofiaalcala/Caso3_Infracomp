@@ -2,7 +2,6 @@ import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
-import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.security.GeneralSecurityException;
@@ -14,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Scanner;
+//import java.util.Scanner;
 
 import javax.crypto.KeyAgreement;
 import javax.crypto.SecretKey;
@@ -62,6 +61,7 @@ public class Cliente {
             establecerClavesSeguras(entrada, salida);
             Map<String, String> servicios = recibirTablaServicios(entrada);
             mostrarServicios(servicios);
+            String idServicio = seleccionarServicioAleatorio(servicios);
             enviarConsulta(idServicio,salida);
             InfoServicio infoServicio = recibirRespuesta(entrada);
             mostrarResultado(infoServicio);
@@ -69,12 +69,24 @@ public class Cliente {
             
         } catch (IOException e) {
             System.err.println("Error al conectar al servidor: " + e.getMessage());
+            e.printStackTrace();
+        } catch (GeneralSecurityException e) {
+            System.err.println("Error de seguridad: " + e.getMessage());
+            e.printStackTrace();
+        } catch (ClassNotFoundException e) {
+            System.err.println("Error al deserializar el objeto: " + e.getMessage());
+            e.printStackTrace();
+        } catch (SecurityException e) {
+            System.err.println("Error de seguridad: " + e.getMessage());
+            e.printStackTrace();
+        } catch (Exception e) {
+            System.err.println("Error inesperado: " + e.getMessage());
+            e.printStackTrace();
         }
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'conectar'");
     }
 
-    private void establecerClavesSeguras(ObjectInputStream entrada, ObjectOutputStream salida) throws IOException, GeneralSecurityException, ClassNotFoundException {
+    private void establecerClavesSeguras(ObjectInputStream entrada, ObjectOutputStream salida) throws IOException, 
+                                            GeneralSecurityException, ClassNotFoundException {
         byte[] parametrosSerializados = (byte[]) entrada.readObject();
         byte[] firmaParametros = (byte[]) entrada.readObject();
 
@@ -96,7 +108,7 @@ public class Cliente {
         X509EncodedKeySpec specDH = new X509EncodedKeySpec(clavePublicaDHServidor);
         PublicKey clavePublicaServidorDH = kewFactory.generatePublic(specDH);
 
-        KeyAgreement keyAgreement = keyAgreement.getInstance("DH");
+        KeyAgreement keyAgreement = KeyAgreement.getInstance("DH");
         keyAgreement.init(miParClavesDH.getPrivate());
         keyAgreement.doPhase(clavePublicaServidorDH, true);
 
@@ -107,7 +119,8 @@ public class Cliente {
         this.claveHMAC = clavesSesion[1];
     }
 
-    private Map<String, String> recibirTablaServicios(ObjectInputStream entrada) throws IOException, GeneralSecurityException, ClassNotFoundException {
+    private Map<String, String> recibirTablaServicios(ObjectInputStream entrada) throws IOException, 
+            GeneralSecurityException, ClassNotFoundException {
         byte[] IV = (byte[]) entrada.readObject();
         byte[] datosTablaServiciosCifrados = (byte[]) entrada.readObject();
         byte[] HMACTabla = (byte[]) entrada.readObject();
@@ -124,22 +137,26 @@ public class Cliente {
     private void mostrarServicios(Map<String,String> servicios) {
         StringBuilder sb = new StringBuilder("\nServicios disponibles:\n");
         for (Map.Entry<String, String> entrada : servicios.entrySet()) {
-            sb.append("ID: ").append(entrada.getKey()).append(", Nombre: ").append(entrada.getValue()).append("\n");
+            sb.append("ID: ").append(entrada.getKey()).append(", Nombre: ")
+                .append(entrada.getValue()).append("\n");
         }
         System.out.println(sb);
     }
     
+    /* 
     private String solicitarSeleccion(Map<String, String> servicios) {
-        Scanner scanner = new Scanner(System.in);
-        System.out.print("\nIngrese el ID del servicio que desea consultar: ");
-        String seleccion = scanner.nextLine().trim();
-        while (!servicios.containsKey(seleccion)) {
-            System.out.println("ID de servicio no válido. Intente nuevamente: ");
-            System.out.print("Ingrese el ID del servicio que desea consultar: ");
-            seleccion = scanner.nextLine().trim();
+        try (Scanner scanner = new Scanner(System.in)) {
+            System.out.print("\nIngrese el ID del servicio que desea consultar: ");
+            String seleccion = scanner.nextLine().trim();
+            while (!servicios.containsKey(seleccion)) {
+                System.out.println("ID de servicio no válido. Intente nuevamente: ");
+                System.out.print("Ingrese el ID del servicio que desea consultar: ");
+                seleccion = scanner.nextLine().trim();
+            }
+            return seleccion;
         }
-        return seleccion;
     }
+    */
 
     private String seleccionarServicioAleatorio(Map<String, String> servicios) {
         List<String> idsServicios = new ArrayList<>(servicios.keySet());
@@ -163,7 +180,8 @@ public class Cliente {
         salida.flush();
     }
 
-    private InfoServicio recibirRespuesta(ObjectInputStream entrada) throws IOException, GeneralSecurityException, ClassNotFoundException {
+    private InfoServicio recibirRespuesta(ObjectInputStream entrada) throws IOException, GeneralSecurityException, 
+                                            ClassNotFoundException {
         byte[] IV = (byte[]) entrada.readObject();
         byte[] respuestaCifrada = (byte[]) entrada.readObject();
         byte[] HMACRespuesta = (byte[]) entrada.readObject();
@@ -230,10 +248,15 @@ public class Cliente {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private Map<String, String> deserializarTablaServicios(byte[] datos) throws IOException, ClassNotFoundException {
         try (ByteArrayInputStream bais = new ByteArrayInputStream(datos);
              ObjectInputStream ois = new ObjectInputStream(bais)) {
-            return (Map<String, String>) ois.readObject();
+            Object obj = ois.readObject();
+            if (!(obj instanceof Map)) {
+                throw new ClassNotFoundException("Objeto deserializado no es un Map");
+            }
+            return (Map<String, String>) obj;
         }
     }
 
@@ -242,5 +265,5 @@ public class Cliente {
              ObjectInputStream ois = new ObjectInputStream(bais)) {
             return (InfoServicio) ois.readObject();
         }
-    
+    }
 }
