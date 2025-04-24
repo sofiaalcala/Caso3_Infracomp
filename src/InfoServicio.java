@@ -35,4 +35,9 @@ public class InfoServicio implements Serializable {
         this.puerto = puerto;
     }
 
+    @Override
+    public String toString() {
+        return "Servicio: " + servicio + ", IP: " + ip + ", Puerto: " + puerto;
+    }
+
 }

@@ -4,10 +4,12 @@ import java.security.*;
 import java.security.spec.*;
 import javax.crypto.*;
 import javax.crypto.spec.*;
+
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class ServidorDelegado implements Runnable {
+public class ServidorDelegado extends Thread {
     private Socket clientSocket;
     private ObjectInputStream entrada;
     private ObjectOutputStream salida;
@@ -31,58 +33,149 @@ public class ServidorDelegado implements Runnable {
         this.tiempoTotalVerificarConsulta = tiempoTotalVerificarConsulta;
     }
 
-
     @Override
     public void run() {
-        try {
+        try{
             salida = new ObjectOutputStream(clientSocket.getOutputStream());
-            salida.flush(); 
+            salida.flush();
             entrada = new ObjectInputStream(clientSocket.getInputStream());
 
             establecerClavesSeguras();
             enviarTablaServicios();
             procesarConsulta();
-
-        } catch (IOException e) {
+        } catch (Exception e){
+            System.err.println("Error en comunicacion con el cliente: " + e.getMessage());
             e.printStackTrace();
         } finally {
             try {
                 if (entrada != null) entrada.close();
                 if (salida != null) salida.close();
                 if (clientSocket != null && !clientSocket.isClosed()) clientSocket.close();
-                System.out.println("Conexión con cliente cerrada.");
             } catch (IOException e) {
-                System.err.println("Error al cerrar conexión: " + e.getMessage());
+                System.err.println("Error cerrando recursos: " + e.getMessage());
             }
         }
     }
 
     private void establecerClavesSeguras() throws Exception {
-        AlgorithmParameterGenerator paramGen = AlgorithmParameterGenerator.getInstance("DH");
-        paramGen.init(1024);
-        AlgorithmParameters params = paramGen.generateParameters();
-        DHParameterSpec dhParamSpec = params.getParameterSpec(DHParameterSpec.class);
-        // Enviar parámetros DH al cliente
-        salida.writeObject(dhParamSpec);        
-        // Generar par de claves DH del servidor
-        KeyPair serverDHKeyPair = CryptoUtils.generarClavesDH(dhParamSpec);        
-        // Enviar clave pública DH del servidor al cliente
-        salida.writeObject(serverDHKeyPair.getPublic());        
-        // Recibir clave pública DH del cliente
-        PublicKey clientDHPublicKey = (PublicKey) entrada.readObject();        
-        // Generar secreto compartido
-        KeyAgreement serverKeyAgreement = KeyAgreement.getInstance("DH");
-        serverKeyAgreement.init(serverDHKeyPair.getPrivate());
-        serverKeyAgreement.doPhase(clientDHPublicKey, true);
-        byte[] secretoCompartido = serverKeyAgreement.generateSecret();        
-        // Derivar claves de sesión
-        SecretKey[] claves = CryptoUtils.generarClavesSesion(secretoCompartido);
-        claveCifrado = claves[0];
-        claveHMAC = claves[1];
-        
-        System.out.println("Claves de sesión establecidas con éxito.");
+        try {
+            AlgorithmParameterGenerator paramGen = AlgorithmParameterGenerator.getInstance("DH");
+            paramGen.init(1024);
+            AlgorithmParameters params = paramGen.generateParameters();
+            DHParameterSpec dhParamsSpec = params.getParameterSpec(DHParameterSpec.class);
 
+            byte[] parametrosSerializados = CryptoUtils.serializarObjeto(dhParamsSpec);
+
+            long inicioFirma = System.nanoTime();
+            byte[] firmaParametros = CryptoUtils.firmarRSA(parametrosSerializados, clavePrivadaServidor);
+            long finFirma = System.nanoTime();
+            tiempoTotalFirma.addAndGet(finFirma - inicioFirma);
+
+            salida.writeObject(parametrosSerializados);
+            salida.writeObject(firmaParametros);
+            salida.flush();
+
+            KeyPair serverDHKeyPair = CryptoUtils.generarClavesDH(dhParamsSpec);
+            
+            byte[] clientDHPublicKeyBytes = (byte[]) entrada.readObject();
+            KeyFactory keyFactory = KeyFactory.getInstance("DH");
+            X509EncodedKeySpec x509KeySpec = new X509EncodedKeySpec(clientDHPublicKeyBytes);
+            PublicKey clientDHPublicKey = keyFactory.generatePublic(x509KeySpec);
+
+            salida.writeObject(serverDHKeyPair.getPublic().getEncoded());
+            salida.flush();
+
+            KeyAgreement serverKeyAgreement = KeyAgreement.getInstance("DH");
+            serverKeyAgreement.init(serverDHKeyPair.getPrivate());
+            serverKeyAgreement.doPhase(clientDHPublicKey, true);
+            byte[] secretoCompartido = serverKeyAgreement.generateSecret();
+
+            SecretKey[] claves = CryptoUtils.generarClavesSesion(secretoCompartido);
+            claveCifrado = claves[0];
+            claveHMAC = claves[1];
+
+            System.out.println("Claves de sesión establecidas con éxito.");
+        } catch (Exception e) {
+            System.err.println("Error al establecer claves seguras: " + e.getMessage());
+            throw e;
+        }   
     }
 
-    //falta
+    private void enviarTablaServicios() throws IOException {
+        try { 
+            Map<String, String> nombresServicios = new HashMap<>();
+            for (Map.Entry<String, InfoServicio> entrada : tablaServicios.entrySet()) {
+                String nombreServicio = entrada.getKey();
+                InfoServicio infoServicio = entrada.getValue();
+                nombresServicios.put(nombreServicio, infoServicio.getServicio());
+            }
+
+            byte[] datosTablaServicios = CryptoUtils.serializarObjeto(nombresServicios);
+
+            byte[] iV = CryptoUtils.generarIV();
+
+            long inicioCifrado = System.nanoTime();
+            byte[] datosTablaServiciosCifrados = CryptoUtils.cifrarAES(datosTablaServicios, claveCifrado, iV);
+            long finCifrado = System.nanoTime();
+            tiempoTotalCifradoTabla.addAndGet(finCifrado - inicioCifrado);
+
+            byte[] HMACTabla = CryptoUtils.generarHMAC(datosTablaServiciosCifrados, claveHMAC);
+
+            salida.writeObject(iV);
+            salida.writeObject(datosTablaServiciosCifrados);
+            salida.writeObject(HMACTabla);
+            salida.flush();
+
+            System.out.println("Tabla de servicios enviada al cliente.");
+        } catch (Exception e) {
+            System.err.println("Error al enviar la tabla de servicios: " + e.getMessage());
+            throw new IOException("Error al enviar la tabla de servicios", e);
+        }
+    }
+
+    private void procesarConsulta() throws IOException, ClassNotFoundException {
+        try {
+            byte[] datosConsulta = (byte[]) entrada.readObject();
+            byte[] HMACConsulta = (byte[]) entrada.readObject();
+
+            long inicioVerificacion = System.nanoTime();
+            boolean hmacVerificado = CryptoUtils.verificarHMAC(datosConsulta, HMACConsulta, claveHMAC);
+            long finVerificacion = System.nanoTime();
+            tiempoTotalVerificarConsulta.addAndGet(finVerificacion - inicioVerificacion);
+
+            if (!hmacVerificado) {
+                System.err.println("Error de seguridad: HMAC de consulta inválido.");
+                throw new SecurityException("Error en la consulta: HMAC inválido.");
+            }
+
+            String idServicio = new String(datosConsulta, "UTF-8");
+            System.out.println("Consulta recibida para servicio: " + idServicio);
+
+            InfoServicio infoServicio;
+            if(tablaServicios.containsKey(idServicio)) {
+                infoServicio = tablaServicios.get(idServicio);
+            } else {
+                infoServicio = new InfoServicio("Servicio no encontrado", "-1","-1");
+            }
+
+            byte[] datosRespuesta = CryptoUtils.serializarObjeto(infoServicio);
+            byte[] iVRespuesta = CryptoUtils.generarIV();
+            byte[] respuestaCifrada = CryptoUtils.cifrarAES(datosRespuesta, claveCifrado, iVRespuesta);
+            byte[] HMACRespuesta = CryptoUtils.generarHMAC(respuestaCifrada, claveHMAC);
+
+            salida.writeObject(iVRespuesta);
+            salida.writeObject(respuestaCifrada);
+            salida.writeObject(HMACRespuesta);
+            salida.flush();
+
+            System.out.println("Respuesta enviada al cliente para servicio: " + idServicio);            
+        } catch (Exception e) {
+            if (e instanceof SecurityException) {
+                throw e;
+            }
+
+            System.err.println("Error al procesar la consulta: " + e.getMessage());
+            throw new IOException("Error al procesar la consulta", e);
+        }
+    } 
 }

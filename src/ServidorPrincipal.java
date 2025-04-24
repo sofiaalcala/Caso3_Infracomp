@@ -88,13 +88,12 @@ public class ServidorPrincipal {
                 
                 ServidorDelegado delegado = new ServidorDelegado(clientSocket, clavePrivadaRSA, clavePublicaRSA, tablaServicios, tiempoTotalFirma, 
                 tiempoTotalCifradoTabla, tiempoTotalVerificarConsulta);
-                
-                Thread thread = new Thread(delegado);
-                thread.start();
 
+                delegado.start();
             }
         } catch (IOException e) {
-            
+            System.err.println("Error en el servidor principal: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
