@@ -37,19 +37,20 @@ public class Cliente {
         this.tiempoCifradoAsimetrico = 0;  
     }
 
-    public void cargarClavePublica(String archivoClavePublica) throws IOException, GeneralSecurityException{
-        try (FileInputStream archivoEntreada = new FileInputStream(archivoClavePublica)) {
-            byte[] claveBytes = new byte[archivoEntreada.available()];
-            archivoEntreada.read(claveBytes);
-
-            X509EncodedKeySpec spec = new X509EncodedKeySpec(claveBytes);
-            KeyFactory kf = KeyFactory.getInstance("RSA");
-            this.clavePublicaServidor = kf.generatePublic(spec);
-        
+    public void cargarClavePublica(String archivoClavePublica) throws IOException, GeneralSecurityException {
+        try (FileInputStream fis = new FileInputStream(archivoClavePublica);
+             ObjectInputStream ois = new ObjectInputStream(fis)) {
+            
+            Object obj = ois.readObject();
+            if (!(obj instanceof PublicKey)) {
+                throw new ClassCastException("El archivo no contiene una clave pública válida");
+            }
+            this.clavePublicaServidor = (PublicKey) obj;
+            
+        } catch (ClassNotFoundException e) {
+            throw new GeneralSecurityException("Error al cargar la clave pública: formato inválido", e);
         } catch (IOException e) {
             throw new IOException("Error al cargar la clave pública: " + e.getMessage(), e);
-        } catch (GeneralSecurityException e) {
-            throw new GeneralSecurityException("Error al cargar la clave pública: " + e.getMessage(), e);
         }
     }
 

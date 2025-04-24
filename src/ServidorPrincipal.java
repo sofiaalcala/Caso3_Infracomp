@@ -42,17 +42,27 @@ public class ServidorPrincipal {
         //tablaServicios.put("S4", new InfoServicio("Venta de tiquete", "IPS4", "PS4"));
     }
 
-    public void cargarClaves(String archivoClavePrivada, String archivoClavePublica) throws FileNotFoundException, IOException, ClassNotFoundException{
-        // Cargar clave privada
+    public void cargarClaves(String archivoClavePrivada, String archivoClavePublica) 
+        throws FileNotFoundException, IOException, ClassNotFoundException {
+        
+        // Cargar clave privada - asegúrate que el archivo contenga la clave privada
         try (FileInputStream fisPriv = new FileInputStream(archivoClavePrivada);
              ObjectInputStream oisPriv = new ObjectInputStream(fisPriv)) {
-            clavePrivadaRSA = (PrivateKey) oisPriv.readObject();
+            Object obj = oisPriv.readObject();
+            if (!(obj instanceof PrivateKey)) {
+                throw new ClassCastException("El archivo no contiene una clave privada válida");
+            }
+            clavePrivadaRSA = (PrivateKey) obj;
         }
         
-        // Cargar clave pública
+        // Cargar clave pública - asegúrate que el archivo contenga la clave pública
         try (FileInputStream fisPub = new FileInputStream(archivoClavePublica);
              ObjectInputStream oisPub = new ObjectInputStream(fisPub)) {
-            clavePublicaRSA = (PublicKey) oisPub.readObject();
+            Object obj = oisPub.readObject();
+            if (!(obj instanceof PublicKey)) {
+                throw new ClassCastException("El archivo no contiene una clave pública válida");
+            }
+            clavePublicaRSA = (PublicKey) obj;
         }
     }
 
@@ -74,6 +84,9 @@ public class ServidorPrincipal {
             ObjectOutputStream oosPub = new ObjectOutputStream(fosPub)) {
             oosPub.writeObject(llavePublica);
             }
+        
+        System.out.println("Clave pública generada en: " + new File(archivoClavePublica).getAbsolutePath());
+        System.out.println("Tamaño del archivo: " + new File(archivoClavePublica).length() + " bytes");
     }
 
     public void iniciar() {
