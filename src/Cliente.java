@@ -1,9 +1,11 @@
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.math.BigInteger;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
@@ -101,55 +103,75 @@ public class Cliente {
         }
     }
 
-    private void establecerClavesSeguras(ObjectInputStream entrada, ObjectOutputStream salida) throws IOException, 
-                                            GeneralSecurityException, ClassNotFoundException {
-        try {
-            System.out.println("Esperando parámetros DH del servidor...");
-            byte[] parametrosSerializados = (byte[]) entrada.readObject();
-            System.out.println("Parámetros DH recibidos del servidor.");
-            byte[] firmaParametros = (byte[]) entrada.readObject();
-            System.out.println("Firma de parámetros DH recibida del servidor.");
+    private void establecerClavesSeguras(ObjectInputStream entrada, ObjectOutputStream salida) throws IOException,
+        GeneralSecurityException, ClassNotFoundException {
+    try {
+        System.out.println("Esperando parámetros DH del servidor...");
 
-            if (!CryptoUtils.verificarFirma(parametrosSerializados, firmaParametros, clavePublicaServidor)) {
-                throw new SecurityException("Error en la consulta: La firma de los parámetros DH no es válida.");
-            }
+        // Leer p, g, l separados
+        BigInteger p = (BigInteger) entrada.readObject();
+        BigInteger g = (BigInteger) entrada.readObject();
+        int l = (int) entrada.readObject();
 
-            DHParameterSpec dhParams = deserializarParametrosDH(parametrosSerializados);
+        System.out.println("Parámetros DH recibidos: p, g, l.");
 
-            KeyPair miParClavesDH = CryptoUtils.generarClavesDH(dhParams);
-            byte[] clavePublicaDH = miParClavesDH.getPublic().getEncoded();
-            
-            salida.writeObject(clavePublicaDH);
-            salida.flush();
-            
-            byte[] clavePublicaDHServidor = (byte[]) entrada.readObject();
-            
-            KeyFactory kewFactory = KeyFactory.getInstance("DH");
-            X509EncodedKeySpec specDH = new X509EncodedKeySpec(clavePublicaDHServidor);
-            PublicKey clavePublicaServidorDH = kewFactory.generatePublic(specDH);
+        // Leer la firma
+        byte[] firmaParametros = (byte[]) entrada.readObject();
+        System.out.println("Firma de parámetros DH recibida.");
 
-            KeyAgreement keyAgreement = KeyAgreement.getInstance("DH");
-            keyAgreement.init(miParClavesDH.getPrivate());
-            keyAgreement.doPhase(clavePublicaServidorDH, true);
+        // Crear los mismos datos serializados para verificar la firma
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(p);
+        oos.writeObject(g);
+        oos.writeObject(l);
+        oos.flush();
+        byte[] parametrosSerializados = baos.toByteArray();
 
-            byte[] secretoCompartido = keyAgreement.generateSecret();
+        if (!CryptoUtils.verificarFirma(parametrosSerializados, firmaParametros, clavePublicaServidor)) {
+            throw new SecurityException("Error en la consulta: La firma de los parámetros DH no es válida.");
+        }
 
-            SecretKey[] clavesSesion = CryptoUtils.generarClavesSesion(secretoCompartido);
-            this.claveCifrado = clavesSesion[0];
-            this.claveHMAC = clavesSesion[1];
-        } catch (IOException e){
-            System.err.println("Error de IO al establecer claves seguras: " + e.getMessage());
-            if (e instanceof EOFException) {
-                System.err.println("Conexión cerrada por el servidor prematuramente");
-            }
-            e.printStackTrace();
-            throw new RuntimeException("Error al establecer claves seguras", e);
-        } catch (Exception e){
-            System.err.println("Error inesperado al establecer claves seguras: " + e.getMessage());
-            e.printStackTrace();
-            throw new RuntimeException("Error al establecer claves seguras", e);
-        } 
+        DHParameterSpec dhParams = new DHParameterSpec(p, g, l);
+
+        // Generar par de claves DH
+        KeyPair miParClavesDH = CryptoUtils.generarClavesDH(dhParams);
+        byte[] clavePublicaDH = miParClavesDH.getPublic().getEncoded();
+
+        salida.writeObject(clavePublicaDH);
+        salida.flush();
+
+        byte[] clavePublicaDHServidor = (byte[]) entrada.readObject();
+
+        KeyFactory keyFactory = KeyFactory.getInstance("DH");
+        X509EncodedKeySpec specDH = new X509EncodedKeySpec(clavePublicaDHServidor);
+        PublicKey clavePublicaServidorDH = keyFactory.generatePublic(specDH);
+
+        KeyAgreement keyAgreement = KeyAgreement.getInstance("DH");
+        keyAgreement.init(miParClavesDH.getPrivate());
+        keyAgreement.doPhase(clavePublicaServidorDH, true);
+
+        byte[] secretoCompartido = keyAgreement.generateSecret();
+
+        SecretKey[] clavesSesion = CryptoUtils.generarClavesSesion(secretoCompartido);
+        this.claveCifrado = clavesSesion[0];
+        this.claveHMAC = clavesSesion[1];
+
+        System.out.println("Claves de sesión establecidas exitosamente.");
+    } catch (IOException e) {
+        System.err.println("Error de IO al establecer claves seguras: " + e.getMessage());
+        if (e instanceof EOFException) {
+            System.err.println("Conexión cerrada por el servidor prematuramente");
+        }
+        e.printStackTrace();
+        throw new RuntimeException("Error al establecer claves seguras", e);
+    } catch (Exception e) {
+        System.err.println("Error inesperado al establecer claves seguras: " + e.getMessage());
+        e.printStackTrace();
+        throw new RuntimeException("Error al establecer claves seguras", e);
+        }
     }
+
 
     private Map<String, String> recibirTablaServicios(ObjectInputStream entrada) throws IOException, 
             GeneralSecurityException, ClassNotFoundException {
@@ -242,7 +264,7 @@ public class Cliente {
 
     private void medirTiempoCifradoAsimetrico() {
         try {
-            byte[] datosSimulados = new byte[1024]; 
+            byte[] datosSimulados = new byte[117]; 
             new Random().nextBytes(datosSimulados);
 
             long incio = System.nanoTime();

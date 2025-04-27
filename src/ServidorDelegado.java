@@ -1,4 +1,5 @@
 import java.io.*;
+import java.math.BigInteger;
 import java.net.*;
 import java.security.*;
 import java.security.spec.*;
@@ -36,9 +37,9 @@ public class ServidorDelegado extends Thread {
     @Override
 public void run() {
     try {
-        entrada = new ObjectInputStream(clientSocket.getInputStream());
         salida = new ObjectOutputStream(clientSocket.getOutputStream());
-        salida.flush();
+        salida.flush(); // Este flush es importante
+        entrada = new ObjectInputStream(clientSocket.getInputStream());
 
         System.out.println("ServidorDelegado: Streams inicializados para cliente " + clientSocket.getInetAddress().getHostAddress());
 
@@ -47,9 +48,10 @@ public void run() {
         procesarConsulta();
     } catch (SocketTimeoutException e) {
         System.err.println("Tiempo en comunicación con el cliente: "+ e.getMessage());
-    } catch (Exception e) {
-        System.err.println("Error en comunicación con el cliente: " + e.getMessage());
-        e.printStackTrace();
+    }catch (Exception e) {
+        System.err.println("[ServidorDelegado] Error en comunicación con cliente: " + e);
+        e.printStackTrace(System.err);
+        
     } finally {
         try {
             if (entrada != null) {
@@ -72,49 +74,68 @@ public void run() {
 }
 
     private void establecerClavesSeguras() throws Exception {
-        try {
-            AlgorithmParameterGenerator paramGen = AlgorithmParameterGenerator.getInstance("DH");
-            paramGen.init(1024);
-            AlgorithmParameters params = paramGen.generateParameters();
-            DHParameterSpec dhParamsSpec = params.getParameterSpec(DHParameterSpec.class);
+    try {
+        System.out.println("[ServidorDelegado] Generando parámetros DH...");
+        AlgorithmParameterGenerator paramGen = AlgorithmParameterGenerator.getInstance("DH");
+        paramGen.init(1024);
+        AlgorithmParameters params = paramGen.generateParameters();
+        DHParameterSpec dhParamsSpec = params.getParameterSpec(DHParameterSpec.class);
 
-            byte[] parametrosSerializados = CryptoUtils.serializarObjeto(dhParamsSpec);
+        System.out.println("[ServidorDelegado] Enviando parámetros DH...");
 
-            long inicioFirma = System.nanoTime();
-            byte[] firmaParametros = CryptoUtils.firmarRSA(parametrosSerializados, clavePrivadaServidor);
-            long finFirma = System.nanoTime();
-            tiempoTotalFirma.addAndGet(finFirma - inicioFirma);
+        // Enviar p, g y l separados
+        BigInteger p = dhParamsSpec.getP();
+        BigInteger g = dhParamsSpec.getG();
+        int l = dhParamsSpec.getL();
 
-            salida.writeObject(parametrosSerializados);
-            salida.writeObject(firmaParametros);
-            salida.flush();
-            System.out.println("Parámetros DH y firma enviados al cliente.");
+        salida.writeObject(p);
+        salida.writeObject(g);
+        salida.writeObject(l);
+        salida.flush();
 
-            KeyPair serverDHKeyPair = CryptoUtils.generarClavesDH(dhParamsSpec);
-            
-            byte[] clientDHPublicKeyBytes = (byte[]) entrada.readObject();
-            KeyFactory keyFactory = KeyFactory.getInstance("DH");
-            X509EncodedKeySpec x509KeySpec = new X509EncodedKeySpec(clientDHPublicKeyBytes);
-            PublicKey clientDHPublicKey = keyFactory.generatePublic(x509KeySpec);
+        // Crear datos serializados para firmar
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(p);
+        oos.writeObject(g);
+        oos.writeObject(l);
+        oos.flush();
+        byte[] parametrosSerializados = baos.toByteArray();
 
-            salida.writeObject(serverDHKeyPair.getPublic().getEncoded());
-            salida.flush();
+        byte[] firmaParametros = CryptoUtils.firmarRSA(parametrosSerializados, clavePrivadaServidor);
 
-            KeyAgreement serverKeyAgreement = KeyAgreement.getInstance("DH");
-            serverKeyAgreement.init(serverDHKeyPair.getPrivate());
-            serverKeyAgreement.doPhase(clientDHPublicKey, true);
-            byte[] secretoCompartido = serverKeyAgreement.generateSecret();
+        salida.writeObject(firmaParametros);
+        salida.flush();
 
-            SecretKey[] claves = CryptoUtils.generarClavesSesion(secretoCompartido);
-            claveCifrado = claves[0];
-            claveHMAC = claves[1];
+        System.out.println("[ServidorDelegado] Parámetros y firma enviados exitosamente.");
 
-            System.out.println("Claves de sesión establecidas con éxito.");
-        } catch (Exception e) {
-            System.err.println("Error al establecer claves seguras: " + e.getMessage());
-            throw e;
-        }   
+        // Continuar con Diffie-Hellman
+        KeyPair serverDHKeyPair = CryptoUtils.generarClavesDH(dhParamsSpec);
+
+        byte[] clientDHPublicKeyBytes = (byte[]) entrada.readObject();
+        KeyFactory keyFactory = KeyFactory.getInstance("DH");
+        X509EncodedKeySpec x509KeySpec = new X509EncodedKeySpec(clientDHPublicKeyBytes);
+        PublicKey clientDHPublicKey = keyFactory.generatePublic(x509KeySpec);
+
+        salida.writeObject(serverDHKeyPair.getPublic().getEncoded());
+        salida.flush();
+
+        KeyAgreement serverKeyAgreement = KeyAgreement.getInstance("DH");
+        serverKeyAgreement.init(serverDHKeyPair.getPrivate());
+        serverKeyAgreement.doPhase(clientDHPublicKey, true);
+        byte[] secretoCompartido = serverKeyAgreement.generateSecret();
+
+        SecretKey[] claves = CryptoUtils.generarClavesSesion(secretoCompartido);
+        claveCifrado = claves[0];
+        claveHMAC = claves[1];
+
+        System.out.println("[ServidorDelegado] Claves de sesión establecidas.");
+    } catch (Exception e) {
+        System.err.println("[ServidorDelegado] Error al establecer claves seguras: " + e);
+        throw e;
+        }
     }
+
 
     private void enviarTablaServicios() throws IOException {
         try { 

@@ -93,14 +93,14 @@ public class ServidorPrincipal {
 
     public void iniciar() {
         try (ServerSocket serverSocket = new ServerSocket(puerto)) {
-            serverSocket.setSoTimeout(30000);
+            serverSocket.setSoTimeout(300000);
             System.out.println("Servidor principal iniciado en puerto " + puerto);
             System.out.println("Esperando conexiones de clientes...");
             
             while (true) {
                 try{
                 Socket clientSocket = serverSocket.accept();
-                clientSocket.setSoTimeout(15000);
+                clientSocket.setSoTimeout(300000);
     
                 contadorClientes.incrementAndGet();
                 System.out.println("Nuevo cliente conectado: " + clientSocket.getInetAddress().getHostAddress());
@@ -131,7 +131,7 @@ public class ServidorPrincipal {
     }
 
     public static void main(String[] args) throws FileNotFoundException, ClassNotFoundException, IOException, NoSuchAlgorithmException {
-        int puerto = 8000;
+        int puerto = 8001;
         ServidorPrincipal servidor = new ServidorPrincipal(puerto);
         servidor.inicializarTablaServicios();
 
