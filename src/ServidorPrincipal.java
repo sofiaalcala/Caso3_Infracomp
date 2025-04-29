@@ -147,7 +147,7 @@ public class ServidorPrincipal {
         }
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            servidor.imprimirEstadisticas();
+            servidor.imprimirEstadisticas(); // Para que salgan resultados, cierre el servidor con Ctrl+C    
             System.out.println("Servidor principal cerrado.");
         }));
 

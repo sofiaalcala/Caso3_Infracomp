@@ -102,7 +102,10 @@ public void run() {
         oos.flush();
         byte[] parametrosSerializados = baos.toByteArray();
 
+        long inicioFirma = System.nanoTime();
         byte[] firmaParametros = CryptoUtils.firmarRSA(parametrosSerializados, clavePrivadaServidor);
+        long finFirma = System.nanoTime();
+        tiempoTotalFirma.addAndGet(finFirma - inicioFirma);
 
         salida.writeObject(firmaParametros);
         salida.flush();
